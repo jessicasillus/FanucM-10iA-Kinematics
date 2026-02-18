@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fanuc LR Mate 200iD — Motion Planner</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<style>
+:root {
+  --bg:       #F7FBFF;
+  --panel:    #FFFFFF;
+  --border:   #D0E4F0;
+  --border2:  #B8D4E8;
+  --blue1:    #3E6990;
+  --blue2:    #2D5478;
+  --blue3:    #C1DBE3;
+  --blue-lt:  #EBF4F9;
+  --accent:   #DE6B48;
+  --accent2:  #C05830;
+  --green:    #3DAA6E;
+  --red:      #D94040;
+  --yellow:   #E8A800;
+  --text:     #1A2E40;
+  --text2:    #3E6990;
+  --dim:      #7A9BB5;
+  --shadow:   0 2px 12px rgba(62,105,144,0.10);
+  --radius:   10px;
+  --radius-sm:6px;
+  --font:     'Nunito', 'Calibri', 'Segoe UI', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width:100%; height:100%; background:var(--bg); color:var(--text); font-family:var(--font); overflow:hidden; }
+
+#app { display:flex; height:100vh; }
+
+/* ── SIDEBAR ── */
+#sidebar {
+  width:310px; min-width:310px;
+  background:#fff;
+  border-right:1px solid var(--border);
+  display:flex; flex-direction:column;
+  overflow-y:auto; overflow-x:hidden;
+  box-shadow:2px 0 16px rgba(62,105,144,0.07);
+}
+#sidebar::-webkit-scrollbar{width:4px;}
+#sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+
+#logo-bar {
+  padding:20px 20px 16px;
+  background:linear-gradient(135deg,var(--blue1) 0%,var(--blue2) 100%);
+  position:relative; overflow:hidden;
+}
+#logo-bar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0.7;}
+#logo-bar h1{font-size:16px;font-weight:800;color:#fff;letter-spacing:0.4px;}
+#logo-bar .sub{font-size:11px;color:rgba(255,255,255,0.65);font-weight:500;margin-top:3px;}
+#logo-bar .dof-badge{position:absolute;top:20px;right:16px;font-size:10px;font-weight:700;color:#fff;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);padding:3px 10px;border-radius:20px;letter-spacing:1px;}
+
+.sec{padding:16px 16px 14px;border-bottom:1px solid var(--border);}
+.sec-title{font-size:10px;font-weight:700;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;}
+
+.tabs{display:flex;background:var(--blue-lt);border:1px solid var(--border);border-radius:var(--radius);padding:3px;margin-bottom:13px;}
+.tab{flex:1;padding:7px 0;background:transparent;border:none;color:var(--dim);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;border-radius:8px;transition:all .2s;}
+.tab.active{background:#fff;color:var(--blue1);box-shadow:0 1px 6px rgba(62,105,144,0.15);}
+.tab:hover:not(.active){color:var(--text2);}
+
+.wp-tabs{display:flex;gap:8px;margin-bottom:14px;}
+.wp-tab{flex:1;padding:8px 0;background:var(--blue-lt);border:1.5px solid var(--border);color:var(--dim);font-family:var(--font);font-size:12px;font-weight:600;cursor:pointer;border-radius:var(--radius-sm);transition:all .2s;}
+.wp-tab.active{background:var(--blue1);color:#fff;border-color:var(--blue1);box-shadow:0 2px 8px rgba(62,105,144,0.25);}
+.wp-tab:hover:not(.active){border-color:var(--blue1);color:var(--blue1);}
+
+.inp-grid{display:grid;grid-template-columns:30px 1fr 36px;gap:6px 8px;align-items:center;}
+.lbl{font-size:13px;font-weight:700;color:var(--blue1);}
+.jlbl{font-size:13px;font-weight:700;color:var(--accent);}
+.unit{font-size:10px;color:var(--dim);font-weight:600;text-align:right;}
+
+input[type=number]{background:var(--blue-lt);border:1.5px solid var(--border);color:var(--text);font-family:var(--font);font-size:13px;font-weight:500;padding:6px 10px;outline:none;width:100%;border-radius:var(--radius-sm);transition:border-color .2s,box-shadow .2s;-moz-appearance:textfield;}
+input[type=number]:focus{border-color:var(--blue1);box-shadow:0 0 0 3px rgba(62,105,144,0.12);background:#fff;}
+input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;}
+.hidden{display:none !important;}
+
+.sm-btn{margin-top:12px;padding:8px 14px;width:100%;background:var(--blue-lt);border:1.5px solid var(--border2);color:var(--blue1);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;border-radius:var(--radius-sm);transition:all .2s;}
+.sm-btn:hover{background:var(--blue1);color:#fff;border-color:var(--blue1);box-shadow:0 2px 8px rgba(62,105,144,0.25);}
+
+.motion-row{display:flex;gap:8px;}
+.motion-btn{flex:1;padding:10px 0;background:var(--blue-lt);border:1.5px solid var(--border);color:var(--dim);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;border-radius:var(--radius-sm);transition:all .2s;}
+.motion-btn.active{background:var(--blue1);color:#fff;border-color:var(--blue1);box-shadow:0 2px 10px rgba(62,105,144,0.3);}
+.motion-btn:hover:not(.active){border-color:var(--blue1);color:var(--blue1);}
+
+.slider-row{display:flex;align-items:center;gap:10px;margin-top:12px;}
+.slider-lbl{font-size:11px;font-weight:600;color:var(--dim);white-space:nowrap;width:40px;}
+input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:5px;background:var(--border);outline:none;border-radius:5px;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:var(--blue1);border-radius:50%;cursor:pointer;box-shadow:0 1px 6px rgba(62,105,144,0.4);border:2px solid #fff;}
+.slider-val{font-size:12px;font-weight:700;color:var(--blue1);width:30px;text-align:right;}
+
+.action-area{padding:14px 16px 6px;display:flex;flex-direction:column;gap:9px;}
+#run-btn{padding:13px;width:100%;background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);border:none;color:#fff;font-family:var(--font);font-size:14px;font-weight:800;letter-spacing:1.5px;cursor:pointer;border-radius:var(--radius);box-shadow:0 4px 14px rgba(222,107,72,0.4);transition:all .2s;}
+#run-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(222,107,72,0.5);}
+#run-btn:active{transform:translateY(0);}
+#anim-btn{padding:10px;width:100%;background:var(--blue-lt);border:1.5px solid var(--blue1);color:var(--blue1);font-family:var(--font);font-size:13px;font-weight:700;letter-spacing:0.5px;cursor:pointer;border-radius:var(--radius);transition:all .2s;}
+#anim-btn:hover,#anim-btn.playing{background:var(--blue1);color:#fff;box-shadow:0 3px 12px rgba(62,105,144,0.3);}
+
+#status-bar{margin:8px 16px 16px;padding:9px 13px;background:var(--blue-lt);border:1px solid var(--border);border-left:3px solid var(--green);font-size:11px;font-weight:500;color:var(--dim);line-height:1.6;min-height:38px;border-radius:0 var(--radius-sm) var(--radius-sm) 0;transition:border-color .3s;}
+#status-bar.error{border-left-color:var(--red);color:var(--red);background:#FFF5F5;}
+#status-bar.warn{border-left-color:var(--yellow);}
+
+#ik-solutions{margin-top:10px;display:flex;flex-wrap:wrap;gap:5px;}
+.sol-btn{padding:5px 12px;background:var(--blue-lt);border:1.5px solid var(--border2);color:var(--dim);font-family:var(--font);font-size:11px;font-weight:600;cursor:pointer;border-radius:20px;transition:all .2s;}
+.sol-btn:hover,.sol-btn.active{background:var(--blue1);color:#fff;border-color:var(--blue1);}
+
+#main{flex:1;display:flex;flex-direction:column;min-width:0;}
+#viewer-wrap{flex:1;position:relative;background:linear-gradient(180deg,#C8E0EF 0%,#DFF0FA 100%);min-height:0;}
+#viewer-wrap canvas{display:block;width:100% !important;height:100% !important;}
+.viewer-hud{position:absolute;pointer-events:none;font-family:var(--font);font-size:10px;font-weight:600;color:rgba(62,105,144,0.6);letter-spacing:0.4px;}
+.viewer-hud.tl{top:12px;left:14px;}
+.viewer-hud.tr{top:12px;right:14px;text-align:right;}
+#ee-info{position:absolute;bottom:12px;left:14px;background:rgba(255,255,255,0.9);border:1px solid var(--border2);padding:7px 14px;font-size:11px;font-weight:600;color:var(--dim);pointer-events:none;line-height:1.8;border-radius:var(--radius-sm);box-shadow:var(--shadow);}
+#ee-info span{color:var(--blue1);font-weight:700;}
+
+#chart-wrap{height:220px;padding:10px 18px 12px;background:#fff;border-top:1px solid var(--border);position:relative;}
+#chart-wrap canvas{width:100% !important;height:100% !important;}
+.chart-hud{position:absolute;top:12px;font-family:var(--font);font-size:10px;font-weight:700;color:var(--dim);pointer-events:none;}
+.chart-hud.left{left:20px;}
+.chart-hud.right{right:20px;color:var(--blue1);}
+
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px;}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div id="sidebar">
+  <div id="logo-bar">
+    <h1>Motion Planner</h1>
+    <div class="sub">Fanuc LR Mate 200iD · ME7751</div>
+    <div class="dof-badge">6-DOF</div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Input Mode</div>
+    <div class="tabs">
+      <button class="tab active" id="tab-joint" onclick="setMode('joint')">Joint</button>
+      <button class="tab"        id="tab-cart"  onclick="setMode('cart')">Cartesian</button>
+    </div>
+    <div class="wp-tabs">
+      <button class="wp-tab active" id="wptab-start" onclick="setWP('start')">▶ Start</button>
+      <button class="wp-tab"        id="wptab-goal"  onclick="setWP('goal')">Goal ▶</button>
+    </div>
+    <div id="joint-panel">
+      <div class="inp-grid">
+        <span class="lbl">θ₁</span><input type="number" id="q1" value="0"  step="1"><span class="unit">°</span>
+        <span class="lbl">θ₂</span><input type="number" id="q2" value="0"  step="1"><span class="unit">°</span>
+        <span class="lbl">θ₃</span><input type="number" id="q3" value="0"  step="1"><span class="unit">°</span>
+        <span class="lbl">θ₄</span><input type="number" id="q4" value="0"  step="1"><span class="unit">°</span>
+        <span class="lbl">θ₅</span><input type="number" id="q5" value="30" step="1"><span class="unit">°</span>
+        <span class="lbl">θ₆</span><input type="number" id="q6" value="0"  step="1"><span class="unit">°</span>
+      </div>
+      <button class="sm-btn" onclick="doFK()">Compute FK →</button>
+    </div>
+    <div id="cart-panel" class="hidden">
+      <div class="inp-grid">
+        <span class="jlbl">X</span> <input type="number" id="cx"  value="0"   step="1"><span class="unit">mm</span>
+        <span class="jlbl">Y</span> <input type="number" id="cy"  value="0"   step="1"><span class="unit">mm</span>
+        <span class="jlbl">Z</span> <input type="number" id="cz"  value="600" step="1"><span class="unit">mm</span>
+        <span class="jlbl">Rx</span><input type="number" id="crx" value="0"   step="1"><span class="unit">°</span>
+        <span class="jlbl">Ry</span><input type="number" id="cry" value="0"   step="1"><span class="unit">°</span>
+        <span class="jlbl">Rz</span><input type="number" id="crz" value="0"   step="1"><span class="unit">°</span>
+      </div>
+      <button class="sm-btn" onclick="doIK()">Compute IK →</button>
+      <div id="ik-solutions"></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Motion Type</div>
+    <div class="motion-row">
+      <button class="motion-btn active" id="btn-J" onclick="setMotion('J')">MoveJ</button>
+      <button class="motion-btn"        id="btn-L" onclick="setMotion('L')">MoveL</button>
+    </div>
+    <div class="slider-row">
+      <span class="slider-lbl">Steps</span>
+      <input type="range" id="steps-sl" min="10" max="200" value="60"
+             oninput="document.getElementById('steps-val').textContent=this.value">
+      <span class="slider-val" id="steps-val">60</span>
+    </div>
+  </div>
+
+  <div class="action-area">
+    <button id="run-btn"  onclick="runMotion()">▶  RUN</button>
+    <button id="anim-btn" onclick="toggleAnim()">⟳  Animate</button>
+  </div>
+  <div id="status-bar">Ready. Set waypoints and press Run.</div>
+</div>
+
+<div id="main">
+  <div id="viewer-wrap">
+    <div class="viewer-hud tl">3D Viewer  |  Drag to orbit  ·  Scroll to zoom</div>
+    <div class="viewer-hud tr" id="motion-label">—</div>
+    <div id="ee-info">
+      EE &nbsp;X: <span id="ee-x">—</span> &nbsp;
+            Y: <span id="ee-y">—</span> &nbsp;
+            Z: <span id="ee-z">—</span> mm
+    </div>
+  </div>
+  <div id="chart-wrap">
+    <span class="chart-hud left">Joint Trajectories θ(t)</span>
+    <span class="chart-hud right">Step: <span id="step-counter">—</span></span>
+    <canvas id="traj-canvas"></canvas>
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// MATH
+// ══════════════════════════════════════════════════════════════
+const PI=Math.PI,DEG=PI/180,RAD=180/PI;
+function eye4(){return[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];}
+function mmul(A,B){const n=A.length,p=B.length,m=B[0].length,C=Array.from({length:n},()=>new Array(m).fill(0));for(let i=0;i<n;i++)for(let k=0;k<p;k++)if(A[i][k]!==0)for(let j=0;j<m;j++)C[i][j]+=A[i][k]*B[k][j];return C;}
+function mmul3(A,B){const C=[[0,0,0],[0,0,0],[0,0,0]];for(let i=0;i<3;i++)for(let k=0;k<3;k++)if(A[i][k]!==0)for(let j=0;j<3;j++)C[i][j]+=A[i][k]*B[k][j];return C;}
+function tr3(R){return[[R[0][0],R[1][0],R[2][0]],[R[0][1],R[1][1],R[2][1]],[R[0][2],R[1][2],R[2][2]]];}
+function mv3(R,v){return[R[0][0]*v[0]+R[0][1]*v[1]+R[0][2]*v[2],R[1][0]*v[0]+R[1][1]*v[1]+R[1][2]*v[2],R[2][0]*v[0]+R[2][1]*v[1]+R[2][2]*v[2]];}
+function clip(x,a,b){return Math.max(a,Math.min(b,x));}
+function wrap(x){return((x+180)%360+360)%360-180;}
+function eulerToR(rz,ry,rx){const cz=Math.cos(rz),sz=Math.sin(rz),cy=Math.cos(ry),sy=Math.sin(ry),cx=Math.cos(rx),sx=Math.sin(rx);return[[cz*cy,cz*sy*sx-sz*cx,cz*sy*cx+sz*sx],[sz*cy,sz*sy*sx+cz*cx,sz*sy*cx-cz*sx],[-sy,cy*sx,cy*cx]];}
+function RtoEuler(R){const sy=-R[2][0],cy=Math.sqrt(R[0][0]**2+R[1][0]**2);if(cy<1e-10)return[Math.atan2(-R[1][2],R[1][1]),PI/2*Math.sign(sy),0];return[Math.atan2(R[1][0],R[0][0]),Math.atan2(sy,cy),Math.atan2(R[2][1],R[2][2])];}
+function rotInterp(R1,R2,t){const Rr=mmul3(tr3(R1),R2),cosT=clip((Rr[0][0]+Rr[1][1]+Rr[2][2]-1)/2,-1,1),theta=Math.acos(cosT);if(Math.abs(theta)<1e-10)return R1.map(r=>[...r]);const st=Math.sin(theta),wx=(Rr[2][1]-Rr[1][2])/(2*st),wy=(Rr[0][2]-Rr[2][0])/(2*st),wz=(Rr[1][0]-Rr[0][1])/(2*st),a=t*theta,c=Math.cos(a),s=Math.sin(a),v=1-c;return mmul3(R1,[[c+wx*wx*v,wx*wy*v-wz*s,wx*wz*v+wy*s],[wy*wx*v+wz*s,c+wy*wy*v,wy*wz*v-wx*s],[wz*wx*v-wy*s,wz*wy*v+wx*s,c+wz*wz*v]]);}
+function smooth(t){return t*t*(3-2*t);}
+
+// ══════════════════════════════════════════════════════════════
+// FANUC DH
+// ══════════════════════════════════════════════════════════════
+const DH=[[0,161,-90,50],[90,0,0,-330],[180,0,-90,0],[0,335,90,0],[0,0,-90,0],[0,235,0,80]];
+const LIMITS=[[-180,180],[-100,145],[-140,213],[-190,190],[-120,120],[-360,360]];
+function dhM(t,d,al,a){const th=t*DEG,alf=al*DEG,ct=Math.cos(th),st=Math.sin(th),ca=Math.cos(alf),sa=Math.sin(alf);return[[ct,-st*ca,st*sa,a*ct],[st,ct*ca,-ct*sa,a*st],[0,sa,ca,d],[0,0,0,1]];}
+function FK(q){let T=eye4();for(let i=0;i<6;i++){const[t0,d,al,a]=DH[i];T=mmul(T,dhM(t0+q[i],d,al,a));}return T;}
+function FKAll(q){const Ts=[eye4()];let T=eye4();for(let i=0;i<6;i++){const[t0,d,al,a]=DH[i];T=mmul(T,dhM(t0+q[i],d,al,a));Ts.push(T.map(r=>[...r]));}return Ts;}
+function IK(T,limits,eps=1e-8){
+  const R=[[T[0][0],T[0][1],T[0][2]],[T[1][0],T[1][1],T[1][2]],[T[2][0],T[2][1],T[2][2]]],p=[T[0][3],T[1][3],T[2][3]],off=mv3(R,[80,0,235]),pw=[p[0]-off[0],p[1]-off[1],p[2]-off[2]];
+  const[xw,yw,zw]=pw,q1b=Math.atan2(yw,xw),z=zw-161,sols=[];
+  for(const sign of[1,-1]){
+    const q1=sign>0?q1b:q1b+PI,r=sign*Math.hypot(xw,yw)-50,s3r_raw=(330**2+335**2-r**2-z**2)/(2*330*335);
+    if(Math.abs(s3r_raw)>1+1e-9)continue;
+    const s3r=clip(s3r_raw,-1,1);
+    for(const q3 of[Math.asin(s3r),PI-Math.asin(s3r)]){
+      const A=330-335*Math.sin(q3),B=335*Math.cos(q3);if(A*A+B*B<1e-12)continue;
+      const q2=Math.atan2(A*r-B*z,B*r+A*z),c1=Math.cos(q1),s1=Math.sin(q1),c23=Math.cos(q2+q3),s23=Math.sin(q2+q3);
+      const R03=[[c1*s23,s1,c1*c23],[s1*s23,-c1,s1*c23],[c23,0,-s23]],R36=mmul3(tr3(R03),R),r33=R36[2][2],s5m=Math.sqrt(Math.max(0,1-r33**2));
+      if(s5m>eps){
+        for(const q5 of[Math.atan2(s5m,r33),Math.atan2(-s5m,r33)]){
+          const s5=Math.sin(q5),q4=Math.atan2(-R36[1][2]/s5,-R36[0][2]/s5),q6=Math.atan2(-R36[2][1]/s5,R36[2][0]/s5);
+          const qd=[q1,q2,q3,q4,q5,q6].map(v=>wrap(v*RAD));
+          if(limits&&!qd.every((qi,i)=>qi>=limits[i][0]&&qi<=limits[i][1]))continue;
+          if(sols.some(s=>s.every((si,i)=>Math.abs(wrap(qd[i]-si))<1e-4)))continue;
+          sols.push(qd);
+        }
+      }else{
+        const q5v=r33>=0?0:PI,q4v=0,q6v=r33>=0?Math.atan2(-R36[0][1],R36[0][0]):Math.atan2(R36[0][1],-R36[0][0]);
+        const qd=[q1,q2,q3,q4v,q5v,q6v].map(v=>wrap(v*RAD));
+        if(limits&&!qd.every((qi,i)=>qi>=limits[i][0]&&qi<=limits[i][1]))continue;
+        if(sols.some(s=>s.every((si,i)=>Math.abs(wrap(qd[i]-si))<1e-4)))continue;
+        sols.push(qd);
+      }
+    }
+  }
+  return sols;
+}
+function closestSol(sols,ref){if(!sols.length)return null;return sols.reduce((best,s)=>{const d=s.reduce((sum,qi,i)=>sum+wrap(qi-ref[i])**2,0);return d<best.d?{s,d}:best;},{s:sols[0],d:Infinity}).s;}
+function moveJ(q0,q1,N){return Array.from({length:N+1},(_,i)=>{const s=smooth(i/N);return q0.map((qs,j)=>qs+s*wrap(q1[j]-qs));});}
+function moveL(q0,q1,N){
+  const T0=FK(q0),T1=FK(q1),p0=[T0[0][3],T0[1][3],T0[2][3]],p1=[T1[0][3],T1[1][3],T1[2][3]];
+  const R0=[[T0[0][0],T0[0][1],T0[0][2]],[T0[1][0],T0[1][1],T0[1][2]],[T0[2][0],T0[2][1],T0[2][2]]];
+  const R1=[[T1[0][0],T1[0][1],T1[0][2]],[T1[1][0],T1[1][1],T1[1][2]],[T1[2][0],T1[2][1],T1[2][2]]];
+  const traj=[];let prevQ=[...q0],warns=0;
+  for(let i=0;i<=N;i++){
+    const s=smooth(i/N),pos=p0.map((pi,k)=>pi+s*(p1[k]-pi)),Ri=rotInterp(R0,R1,s);
+    const T=[[Ri[0][0],Ri[0][1],Ri[0][2],pos[0]],[Ri[1][0],Ri[1][1],Ri[1][2],pos[1]],[Ri[2][0],Ri[2][1],Ri[2][2],pos[2]],[0,0,0,1]];
+    const sols=IK(T,LIMITS);
+    if(!sols.length){warns++;traj.push([...prevQ]);}
+    else{const q=closestSol(sols,prevQ);prevQ=[...q];traj.push(q);}
+  }
+  return{traj,warns};
+}
+
+// ══════════════════════════════════════════════════════════════
+// THREE.JS
+// ══════════════════════════════════════════════════════════════
+let scene,camera,renderer,robotGrp,trailGrp;
+let drag=false,lastM={x:0,y:0};
+let sph={th:0.7,phi:1.0,r:820};
+const target=new THREE.Vector3(0,280,0);
+function camUpdate(){const{th,phi,r}=sph;camera.position.set(target.x+r*Math.sin(phi)*Math.sin(th),target.y+r*Math.cos(phi),target.z+r*Math.sin(phi)*Math.cos(th));camera.lookAt(target);}
+function r2t(T){return new THREE.Vector3(T[0][3],T[2][3],T[1][3]);}
+function rv2t(x,y,z){return new THREE.Vector3(x,z,y);}
+
+function mkCyl(p1,p2,rad,col,grp,emissive=0x000000){
+  const dx=p2.x-p1.x,dy=p2.y-p1.y,dz=p2.z-p1.z,len=Math.sqrt(dx*dx+dy*dy+dz*dz);
+  if(len<0.5)return;
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(rad,rad*1.04,len,14),new THREE.MeshPhongMaterial({color:col,emissive:emissive,shininess:90,specular:0xFFFFCC}));
+  m.position.set((p1.x+p2.x)/2,(p1.y+p2.y)/2,(p1.z+p2.z)/2);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),new THREE.Vector3(dx,dy,dz).normalize());
+  m.castShadow=true; grp.add(m);
+}
+function mkSphere(pos,r,col,grp){
+  const m=new THREE.Mesh(new THREE.SphereGeometry(r,14,10),new THREE.MeshPhongMaterial({color:col,shininess:60}));
+  m.position.copy(pos);m.castShadow=true;grp.add(m);
+}
+
+const FY=0xFFCC00, FYD=0xE0B000, JC=0x222222;
+
+function drawRobot(q){
+  if(!robotGrp)return;
+  while(robotGrp.children.length)robotGrp.remove(robotGrp.children[0]);
+  const Ts=FKAll(q), pts=Ts.map(r2t);
+  // pts[0] = base origin, pts[1..6] = joint/link-end positions in THREE coords
+
+  // ── BASE PLATE (always at ground) ──
+  const basePlate=new THREE.Mesh(new THREE.CylinderGeometry(85,92,14,24),
+    new THREE.MeshPhongMaterial({color:0x1A1A1A,shininess:70}));
+  basePlate.position.set(pts[0].x,-7,pts[0].z);
+  basePlate.castShadow=true; robotGrp.add(basePlate);
+
+  // ── BASE COLUMN: ground → joint 1 ──
+  // The base column goes from ground up to pts[1]
+  const groundPt = new THREE.Vector3(pts[0].x, 0, pts[0].z);
+  mkCyl(groundPt, pts[1], 38, FY, robotGrp, 0x221100);
+
+  // ── J1 HOUSING (box around joint 1) ──
+  const j1box=new THREE.Mesh(new THREE.BoxGeometry(70,55,60),
+    new THREE.MeshPhongMaterial({color:FY,emissive:0x221100,shininess:95,specular:0xFFFFDD}));
+  j1box.position.copy(pts[1]);
+  j1box.castShadow=true; robotGrp.add(j1box);
+  // Dark ring around j1
+  const j1ring=new THREE.Mesh(new THREE.CylinderGeometry(36,36,18,20),
+    new THREE.MeshPhongMaterial({color:JC,shininess:80}));
+  j1ring.position.copy(pts[1]); robotGrp.add(j1ring);
+
+  // ── UPPER ARM: joint 1 → joint 2 ──
+  mkCyl(pts[1], pts[2], 18, FY, robotGrp, 0x221100);
+
+  // ── J2 HOUSING ──
+  const j2box=new THREE.Mesh(new THREE.BoxGeometry(55,45,50),
+    new THREE.MeshPhongMaterial({color:FY,emissive:0x221100,shininess:95,specular:0xFFFFDD}));
+  j2box.position.copy(pts[2]);
+  j2box.castShadow=true; robotGrp.add(j2box);
+
+  // ── FOREARM: joint 2 → joint 3 ──
+  mkCyl(pts[2], pts[3], 14, FY, robotGrp, 0x221100);
+
+  // ── WRIST BODY: joint 3 → joint 4 ──
+  mkCyl(pts[3], pts[4], 11, FY, robotGrp, 0x221100);
+
+  // ── WRIST 2: joint 4 → joint 5 ──
+  mkCyl(pts[4], pts[5], 9, FY, robotGrp, 0x221100);
+
+  // ── WRIST 3 / TOOL: joint 5 → EE ──
+  mkCyl(pts[5], pts[6], 8, FYD, robotGrp, 0x110A00);
+
+  // ── JOINT SPHERES (dark knuckles) ──
+  const jR=[0,0,20,16,12,10,9];
+  for(let i=2;i<=6;i++) mkSphere(pts[i], jR[i], JC, robotGrp);
+
+  // ── TOOL FLANGE ──
+  const fDir=new THREE.Vector3(pts[6].x-pts[5].x,pts[6].y-pts[5].y,pts[6].z-pts[5].z).normalize();
+  if(fDir.length()>0.01){
+    const flange=new THREE.Mesh(new THREE.CylinderGeometry(11,13,14,16),
+      new THREE.MeshPhongMaterial({color:0x333333,shininess:90}));
+    flange.position.copy(pts[6]);
+    flange.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),fDir);
+    flange.castShadow=true; robotGrp.add(flange);
+  }
+
+  // ── EE FRAME AXES (X=red, Y=green, Z=blue) ──
+  const T6=Ts[6], ep=pts[6], ax=50;
+  mkCyl(ep, ep.clone().add(rv2t(T6[0][0],T6[1][0],T6[2][0]).normalize().multiplyScalar(ax)), 2, 0xDD2244, robotGrp);
+  mkCyl(ep, ep.clone().add(rv2t(T6[0][1],T6[1][1],T6[2][1]).normalize().multiplyScalar(ax)), 2, 0x22AA44, robotGrp);
+  mkCyl(ep, ep.clone().add(rv2t(T6[0][2],T6[1][2],T6[2][2]).normalize().multiplyScalar(ax)), 2, 0x2255EE, robotGrp);
+
+  // ── HUD ──
+  const T=FK(q);
+  document.getElementById('ee-x').textContent=T[0][3].toFixed(1);
+  document.getElementById('ee-y').textContent=T[1][3].toFixed(1);
+  document.getElementById('ee-z').textContent=T[2][3].toFixed(1);
+}
+
+function drawTrail(traj){
+  if(!trailGrp)return;
+  while(trailGrp.children.length)trailGrp.remove(trailGrp.children[0]);
+  if(traj.length<2)return;
+  const pts=traj.map(q=>{const T=FK(q);return r2t(T);});
+  const geo=new THREE.BufferGeometry().setFromPoints(pts);
+  trailGrp.add(new THREE.Line(geo,new THREE.LineBasicMaterial({color:0x3E6990,opacity:0.7,transparent:true})));
+}
+
+function initThree(){
+  const el=document.getElementById('viewer-wrap');
+  const W=el.clientWidth||900,H=el.clientHeight||500;
+  scene=new THREE.Scene();
+  scene.background=new THREE.Color(0xCCE4F0);
+  scene.fog=new THREE.FogExp2(0xCCE4F0,0.0003);
+  camera=new THREE.PerspectiveCamera(42,W/H,1,6000);
+  camUpdate();
+  renderer=new THREE.WebGLRenderer({antialias:true});
+  renderer.setSize(W,H);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  renderer.shadowMap.enabled=true;
+  renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  el.appendChild(renderer.domElement);
+
+  // Lights
+  scene.add(new THREE.AmbientLight(0xC8D8E8,0.75));
+  const sun=new THREE.DirectionalLight(0xFFFDF0,1.1);
+  sun.position.set(600,1200,500);sun.castShadow=true;
+  sun.shadow.mapSize.width=2048;sun.shadow.mapSize.height=2048;
+  sun.shadow.camera.near=10;sun.shadow.camera.far=3000;
+  sun.shadow.camera.left=-800;sun.shadow.camera.right=800;
+  sun.shadow.camera.top=800;sun.shadow.camera.bottom=-800;
+  scene.add(sun);
+  const fill=new THREE.DirectionalLight(0xAABBCC,0.4);fill.position.set(-400,300,-300);scene.add(fill);
+  const rim=new THREE.DirectionalLight(0xFFEECC,0.2);rim.position.set(0,100,700);scene.add(rim);
+
+  // Ground plane
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(2800,2800),new THREE.MeshPhongMaterial({color:0xDDECF4,shininess:8}));
+  floor.rotation.x=-Math.PI/2;floor.position.y=-1;floor.receiveShadow=true;scene.add(floor);
+
+  // Grid
+  const grid=new THREE.GridHelper(2000,40,0xA8C4D4,0xBED0DC);
+  grid.position.y=0.5;scene.add(grid);
+
+  // Mounting plate
+  const plate=new THREE.Mesh(new THREE.BoxGeometry(210,10,210),new THREE.MeshPhongMaterial({color:0xB0B8C4,shininess:70,specular:0x667788}));
+  plate.position.set(0,-5,0);plate.receiveShadow=true;plate.castShadow=true;scene.add(plate);
+
+  robotGrp=new THREE.Group();scene.add(robotGrp);
+  trailGrp=new THREE.Group();scene.add(trailGrp);
+
+  const c=renderer.domElement;
+  c.addEventListener('mousedown',e=>{drag=true;lastM={x:e.clientX,y:e.clientY};});
+  window.addEventListener('mousemove',e=>{if(!drag)return;sph.th-=(e.clientX-lastM.x)*0.006;sph.phi=clip(sph.phi+(e.clientY-lastM.y)*0.006,0.06,PI*0.9);lastM={x:e.clientX,y:e.clientY};camUpdate();});
+  window.addEventListener('mouseup',()=>drag=false);
+  c.addEventListener('wheel',e=>{e.preventDefault();sph.r=clip(sph.r+e.deltaY*0.7,150,2500);camUpdate();},{passive:false});
+  window.addEventListener('resize',()=>{const W2=el.clientWidth,H2=el.clientHeight;camera.aspect=W2/H2;camera.updateProjectionMatrix();renderer.setSize(W2,H2);});
+
+  (function loop(){requestAnimationFrame(loop);renderer.render(scene,camera);})();
+}
+
+// ══════════════════════════════════════════════════════════════
+// CHART
+// ══════════════════════════════════════════════════════════════
+let chart=null;
+const COLORS=['#3E6990','#DE6B48','#2D9E6B','#8B5EA8','#D4A520','#2080C0'];
+function initChart(){
+  const ctx=document.getElementById('traj-canvas').getContext('2d');
+  chart=new Chart(ctx,{
+    type:'line',
+    data:{labels:[],datasets:Array.from({length:6},(_,i)=>({label:`θ${i+1}`,data:[],borderColor:COLORS[i],backgroundColor:'transparent',borderWidth:2,pointRadius:0,tension:0.3}))},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{
+        legend:{position:'right',labels:{color:'#3E6990',font:{family:'Nunito',size:11,weight:'600'},boxWidth:16,padding:8}},
+        tooltip:{backgroundColor:'#fff',borderColor:'#D0E4F0',borderWidth:1,titleColor:'#3E6990',bodyColor:'#1A2E40',bodyFont:{family:'Nunito',size:11},padding:8,cornerRadius:8}
+      },
+      scales:{
+        x:{ticks:{color:'#7A9BB5',font:{family:'Nunito',size:10},maxTicksLimit:12},grid:{color:'#E8F0F6'},title:{display:true,text:'Step',color:'#7A9BB5',font:{family:'Nunito',size:10}}},
+        y:{ticks:{color:'#7A9BB5',font:{family:'Nunito',size:10}},grid:{color:'#E8F0F6'},title:{display:true,text:'Angle (°)',color:'#7A9BB5',font:{family:'Nunito',size:10}}}
+      }
+    }
+  });
+}
+function updateChart(traj){chart.data.labels=Array.from({length:traj.length},(_,i)=>i);for(let j=0;j<6;j++)chart.data.datasets[j].data=traj.map(q=>+q[j].toFixed(3));chart.update('none');}
+
+// ══════════════════════════════════════════════════════════════
+// APP
+// ══════════════════════════════════════════════════════════════
+let mode='joint',activeWP='start',motionType='J';
+let trajectory=[],animStep=0,playing=false,animTimer=null;
+const WP={start:{joint:[0,0,0,0,30,0]},goal:{joint:[30,-40,-45,45,25,30]}};
+
+function setStatus(msg,type='ok'){const el=document.getElementById('status-bar');el.textContent=msg;el.className=type;}
+function getJoints(){return['q1','q2','q3','q4','q5','q6'].map(id=>parseFloat(document.getElementById(id).value)||0);}
+function setJoints(q){['q1','q2','q3','q4','q5','q6'].forEach((id,i)=>{document.getElementById(id).value=q[i].toFixed(2);});}
+function getCartT(){const x=parseFloat(document.getElementById('cx').value)||0,y=parseFloat(document.getElementById('cy').value)||0,z=parseFloat(document.getElementById('cz').value)||0,rz=(parseFloat(document.getElementById('crz').value)||0)*DEG,ry=(parseFloat(document.getElementById('cry').value)||0)*DEG,rx=(parseFloat(document.getElementById('crx').value)||0)*DEG,R=eulerToR(rz,ry,rx);return[[R[0][0],R[0][1],R[0][2],x],[R[1][0],R[1][1],R[1][2],y],[R[2][0],R[2][1],R[2][2],z],[0,0,0,1]];}
+function setCart(T){document.getElementById('cx').value=T[0][3].toFixed(1);document.getElementById('cy').value=T[1][3].toFixed(1);document.getElementById('cz').value=T[2][3].toFixed(1);const eu=RtoEuler([[T[0][0],T[0][1],T[0][2]],[T[1][0],T[1][1],T[1][2]],[T[2][0],T[2][1],T[2][2]]]);document.getElementById('crz').value=(eu[0]*RAD).toFixed(1);document.getElementById('cry').value=(eu[1]*RAD).toFixed(1);document.getElementById('crx').value=(eu[2]*RAD).toFixed(1);}
+function setMode(m){mode=m;document.getElementById('tab-joint').classList.toggle('active',m==='joint');document.getElementById('tab-cart').classList.toggle('active',m==='cart');document.getElementById('joint-panel').classList.toggle('hidden',m!=='joint');document.getElementById('cart-panel').classList.toggle('hidden',m!=='cart');if(m==='cart')setCart(FK(getJoints()));}
+function saveWP(){WP[activeWP].joint=getJoints();}
+function loadWP(wp){setJoints(WP[wp].joint);if(mode==='cart')setCart(FK(WP[wp].joint));drawRobot(WP[wp].joint);}
+function setWP(wp){saveWP();activeWP=wp;document.getElementById('wptab-start').classList.toggle('active',wp==='start');document.getElementById('wptab-goal').classList.toggle('active',wp==='goal');loadWP(wp);}
+function doFK(){saveWP();const q=getJoints();WP[activeWP].joint=q;const T=FK(q);setCart(T);drawRobot(q);setStatus(`FK → EE (${T[0][3].toFixed(0)}, ${T[1][3].toFixed(0)}, ${T[2][3].toFixed(0)}) mm`);}
+let ikSols=[];
+function doIK(){const T=getCartT();ikSols=IK(T,LIMITS);const div=document.getElementById('ik-solutions');div.innerHTML='';if(!ikSols.length){setStatus('IK: No solution within joint limits','error');return;}ikSols.forEach((q,i)=>{const b=document.createElement('button');b.className='sol-btn'+(i===0?' active':'');b.textContent=`Sol ${i+1}`;b.onclick=()=>{div.querySelectorAll('.sol-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');WP[activeWP].joint=[...q];setJoints(q);drawRobot(q);};div.appendChild(b);});WP[activeWP].joint=[...ikSols[0]];setJoints(ikSols[0]);drawRobot(ikSols[0]);setStatus(`IK: ${ikSols.length} solution(s) found`);}
+function setMotion(t){motionType=t;document.getElementById('btn-J').classList.toggle('active',t==='J');document.getElementById('btn-L').classList.toggle('active',t==='L');}
+function runMotion(){
+  saveWP();const q0=WP.start.joint,q1=WP.goal.joint,N=parseInt(document.getElementById('steps-sl').value),label=document.getElementById('motion-label');
+  try{
+    if(motionType==='J'){trajectory=moveJ(q0,q1,N);setStatus(`MoveJ — ${trajectory.length} steps (cubic polynomial)`);label.textContent='Mode: MoveJ';}
+    else{const res=moveL(q0,q1,N);trajectory=res.traj;setStatus(res.warns>0?`MoveL: ${trajectory.length} steps — ⚠ ${res.warns} IK fallback(s)`:`MoveL — ${trajectory.length} steps (screw axis)`,res.warns>0?'warn':'ok');label.textContent='Mode: MoveL';}
+    drawTrail(trajectory);updateChart(trajectory);animStep=0;drawRobot(trajectory[0]);
+    document.getElementById('step-counter').textContent=`0 / ${trajectory.length-1}`;
+  }catch(e){setStatus('Error: '+e.message,'error');console.error(e);}
+}
+function toggleAnim(){if(!trajectory.length){setStatus('Press Run first','warn');return;}playing?stopAnim():startAnim();}
+function startAnim(){playing=true;document.getElementById('anim-btn').textContent='⏹  Stop';document.getElementById('anim-btn').classList.add('playing');stepAnim();}
+function stopAnim(){playing=false;document.getElementById('anim-btn').textContent='⟳  Animate';document.getElementById('anim-btn').classList.remove('playing');clearTimeout(animTimer);}
+function stepAnim(){if(!playing)return;drawRobot(trajectory[animStep]);document.getElementById('step-counter').textContent=`${animStep} / ${trajectory.length-1}`;animStep=(animStep+1)%trajectory.length;animTimer=setTimeout(stepAnim,35);}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  initChart();
+  requestAnimationFrame(()=>{
+    initThree();
+    setTimeout(()=>{loadWP('start');runMotion();},120);
+  });
+});
+</script>
+</body>
+</html>
