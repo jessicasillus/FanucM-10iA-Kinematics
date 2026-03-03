@@ -21,6 +21,9 @@ This repository contains a motion planning web app for a **Fanuc LR Mate 200iD 4
 **Documentation**: `Project_Documentation.md`
     Brief documentation of derivations, test results, design decisions
 
+**Paper**: `Main.pdf`
+    Conference style paper discussing derivations, test results, design decisions
+
 ## How to run the web app (local)
 1. Download/clone the repo
 2. Open `KinematicsWebApp.html` in browser
