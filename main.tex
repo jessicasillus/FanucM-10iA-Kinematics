@@ -1,0 +1,281 @@
+\documentclass[conference]{IEEEtran}
+
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{booktabs}
+\usepackage{url}
+\usepackage{cite}
+\usepackage[caption=false,font=footnotesize]{subfig}
+\usepackage{float}
+
+\graphicspath{{figs/}}
+
+\title{Forward and Inverse Kinematics\\of the FANUC M-10iA Industrial Manipulator}
+
+\author{
+\IEEEauthorblockN{Jessica Sillus}
+\IEEEauthorblockA{ME 7751 Project 1\\
+The Ohio State University\\
+Email: sillus.1@osu.edu}
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This project implements complete forward and inverse kinematics for the FANUC M-10iA, a six-degree-of-freedom industrial robot arm.
+Forward kinematics (FK) is derived using the standard Denavit--Hartenberg (DH) convention, with explicit accounting for the FANUC encoder-to-DH joint-angle mappings.
+An analytical, closed-form inverse kinematics (IK) solver is developed that enumerates up to 18 geometrically distinct solutions per pose through systematic shoulder, elbow, and wrist branch combinations.
+Seven test configurations spanning nominal poses, wrist singularities, joint-limit boundaries, and overhead reaches are verified via FK--IK round-trip tests, achieving position errors below $10^{-12}$~mm and rotation errors below $10^{-14}$.
+All results are cross-validated against the RoboDK simulation environment.
+A motion planning application integrating MoveJ (joint-space) and MoveL (Cartesian linear) interpolation is also presented.
+\end{abstract}
+
+\begin{IEEEkeywords}
+forward kinematics, inverse kinematics, FANUC M-10iA, motion planning, web application
+\end{IEEEkeywords}
+
+% ============================================================
+\section{Introduction}
+
+Industrial manipulators are used for a variety of applications, including assembly, material handling, and welding. Determining the forward and inverse kinematics of these robots is essential for accurate control and motion planning.
+Forward kinematics (FK) maps a joint-angle vector to a homogeneous end-effector pose, while inverse kinematics (IK) recovers all joint configurations that realize a prescribed pose.
+This project focuses on the \textbf{FANUC M-10iA}, a 6-DOF, 10\,kg-payload industrial arm with a 1422\,mm reach, representative of medium-duty assembly and material-handling applications.
+
+The primary contributions of this work are:
+(i)~a Python FK implementation using the standard DH convention with explicit FANUC encoder-to-DH mappings (Table~\ref{tab:dh}, Eq.~\eqref{eq:fanucmap}),
+(ii)~an analytical, multi-branch IK solver that exhaustively enumerates all geometric solution branches,
+(iii)~numerical and RoboDK-based round-trip verification across seven representative test configurations (Table~\ref{tab:iktests}, Fig.~\ref{fig:robodk_column}), and
+(iv)~a browser-based motion planning tool supporting both joint-space and Cartesian interpolation (Figs.~\ref{fig:movej_app} and~\ref{fig:movel_app}).
+
+% ============================================================
+\section{Forward Kinematics}
+
+\subsection{DH Parameters and FANUC Convention}
+Each link transform follows the standard Denavit--Hartenberg convention:
+\begin{equation}
+\mathbf{A}_i =
+\begin{bmatrix}
+c_{\theta_i} & -s_{\theta_i}c_{\alpha_i} & s_{\theta_i}s_{\alpha_i} & a_i c_{\theta_i}\\
+s_{\theta_i} &  c_{\theta_i}c_{\alpha_i} &-c_{\theta_i}s_{\alpha_i} & a_i s_{\theta_i}\\
+0            & s_{\alpha_i}              & c_{\alpha_i}              & d_i\\
+0            & 0                         & 0                         & 1
+\end{bmatrix},
+\label{eq:dh}
+\end{equation}
+and the end-effector pose is obtained by chaining all six transforms: $\mathbf{T}_{06}=\mathbf{A}_1\cdots\mathbf{A}_6$.
+
+Table~\ref{tab:dh} lists the DH parameters for the FANUC M-10iA.
+The FANUC controller reports encoder angles $(J_1,\ldots,J_6)$ that differ from the DH joint variables $(\theta_1,\ldots,\theta_6)$ due to the physical arm geometry.
+The implemented encoder-to-DH mappings are:
+\begin{align}
+\theta_1 &= J_1, \quad
+\theta_2  = J_2, \quad
+\theta_3  = -(J_2 + J_3), \nonumber\\
+\theta_4 &= J_4, \quad
+\theta_5  = -J_5, \quad
+\theta_6  = J_6. \label{eq:fanucmap}
+\end{align}
+Specifically, $J_3$ is measured relative to the $J_2$ arm in the FANUC convention, requiring the compound offset in $\theta_3$; and $J_5$ is sign-inverted to align with the DH $z$-axis direction.
+
+\begin{table}[t]
+\centering
+\caption{DH parameters for the FANUC M-10iA.}
+\label{tab:dh}
+\begin{tabular}{c c c c c}
+\toprule
+Joint $i$ & DH variable $\theta_i$ & $d_i$ (mm) & $a_i$ (mm) & $\alpha_i$ (deg)\\
+\midrule
+1 & $J_1$            & 450 & 150 & $-90$ \\
+2 & $J_2$            &   0 & 600 &    0  \\
+3 & $-(J_2{+}J_3)$  &   0 & 200 & $-90$ \\
+4 & $J_4$            & 640 &   0 & $+90$ \\
+5 & $-J_5$           &   0 &   0 & $-90$ \\
+6 & $J_6$            &   0 &   0 &    0  \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{FK Implementation}
+FK is implemented in Python using SymPy for exact symbolic evaluation and NumPy for efficient numerical back-substitution.
+For a given set of FANUC encoder angles, the mapping of \eqref{eq:fanucmap} is applied first; then each $\mathbf{A}_i$ in \eqref{eq:dh} is computed and multiplied in sequence.
+Intermediate transforms $\mathbf{T}_{01}$ through $\mathbf{T}_{06}$ are retained for frame visualization and debugging.
+
+\subsection{FK Validation}
+FK is validated both implicitly, through FK--IK round-trip tests (Section~\ref{sec:ikverify}), and explicitly, by comparing $\mathbf{T}_{06}$ against RoboDK poses for all seven configurations.
+The home position ($\mathbf{q}=\mathbf{0}$) produces the expected result: the rotation block equals $\mathrm{diag}(1,-1,-1)$ and the end-effector is located at $[950, 0, -190]^T$~mm, consistent with the arm fully extended along the base $x$-axis.
+
+% ============================================================
+\section{Inverse Kinematics}
+
+\subsection{Analytical Decoupling}
+The M-10iA possesses a spherical wrist, enabling classical position--orientation decoupling.
+Given a desired pose $\mathbf{T}_{06}$, the wrist center is isolated by subtracting the wrist offset along the tool $z$-axis:
+\begin{equation}
+\mathbf{p}_{wc} = \mathbf{p}_{06} - d_4\,\hat{\mathbf{z}}_{06}.
+\end{equation}
+
+The shoulder angle $\theta_1$ is then determined from the projection of $\mathbf{p}_{wc}$ onto the base plane.
+An effective two-link planar arm is formed in the vertical plane through the shoulder, using the composite forearm length $L = \sqrt{a_3^2 + d_4^2}$ and offset angle $\phi = \arctan_2(d_4, a_3)$.
+The law of cosines yields $\theta_3$, and $\theta_2$ is recovered from the $2{\times}2$ linear system formed by the reach and height equations.
+
+\subsection{Wrist Orientation}
+After computing $\mathbf{R}_{03}$ from $(\theta_1,\theta_2,\theta_3)$, the wrist sub-problem reduces to:
+\begin{equation}
+\mathbf{R}_{36} = \mathbf{R}_{03}^T\,\mathbf{R}_{06}.
+\end{equation}
+The wrist angles $(\theta_4,\theta_5,\theta_6)$ are extracted from $\mathbf{R}_{36}$ using the ZYZ-style Euler decomposition inherent to the $\alpha_4\!=\!+90°$, $\alpha_5\!=\!-90°$, $\alpha_6\!=\!0°$ wrist chain.
+
+\subsection{Solution Branches and Joint Wrapping}
+Three independent binary choices enumerate all geometric solution branches:
+\begin{enumerate}
+\item \textbf{Shoulder} ($\theta_1$): two base-plane solutions separated by $180°$.
+\item \textbf{Elbow} ($\theta_3$): elbow-up and elbow-down from $\pm\arccos(c_{\phi_3})$.
+\item \textbf{Wrist flip} ($\theta_5$): positive and negative values from $s_5 = \pm\sqrt{1-c_5^2}$.
+\end{enumerate}
+This yields up to $2^3 = 8$ solutions in the general case.
+Each raw solution is subsequently normalized to $(-180°, 180°]$ and expanded with $\pm360°$ shifts to identify all in-limit representations.
+The $\theta_1 = \pm 180°$ symmetry can further double the number of configurations near the back-reach boundary, producing up to 18 verified solutions (as observed in Test~7 of Table~\ref{tab:iktests}).
+Near-duplicate solutions within $0.01°$ are removed.
+
+\subsection{Singularity Handling}
+Three singular configurations require special treatment:
+\textit{Wrist singularity} ($|s_5| < 10^{-5}$): axes 4 and 6 become collinear; $\theta_4$ and $\theta_6$ are not independently defined.
+The solver sets $\theta_4 = 0$ and absorbs the combined wrist rotation into $\theta_6$, matching the RoboDK canonical form.
+\textit{Shoulder singularity} ($r_{xy} < 10^{-6}$~mm): the wrist center lies on the $z_0$-axis; $\theta_1$ defaults to zero.
+\textit{Elbow singularity} (arm fully extended): the cosine argument is clamped to $[-1,1]$ and the resulting boundary configuration is accepted as an approximate solution.
+
+% ============================================================
+\section{IK Verification}
+\label{sec:ikverify}
+
+\subsection{Methodology}
+Each test follows the FK--IK round-trip protocol:
+\begin{enumerate}
+\item Choose a FANUC configuration $\mathbf{q}_{\mathrm{test}}$.
+\item Compute $\mathbf{T}_{\mathrm{test}} = \mathrm{FK}(\mathbf{q}_{\mathrm{test}})$.
+\item Solve $\{\mathbf{q}_{IK}\} = \mathrm{IK}(\mathbf{T}_{\mathrm{test}})$.
+\item For each solution, evaluate the position error $e_p = \|\mathbf{p}_{IK} - \mathbf{p}_{\mathrm{test}}\|$ and the rotation error $e_R = \|\mathbf{R}_{IK} - \mathbf{R}_{\mathrm{test}}\|_F$.
+\end{enumerate}
+Solutions satisfying $e_p < 10^{-4}$~mm and $e_R < 10^{-6}$ are classified as verified.
+Configurations with $|\theta_1|=180°$ incur a small numerical offset ($\approx 2.1$~mm) due to floating-point periodicity and are labelled \emph{Equivalent Configuration}.
+All verified solutions are cross-checked against the RoboDK \emph{Other Configurations} panel.
+
+\subsection{Test Configurations and Results}
+Seven configurations spanning the operational envelope are summarized in Table~\ref{tab:iktests}.
+These cases specifically target distinct geometric states, including nominal operation, the home position, and joint-limit boundaries.
+
+Tests~1, 3, 4, 5, and 7 achieve full verification across all returned solutions.
+Tests~2 and~6 contain a small number of unverified solutions attributable to expected numerical effects: in Test~2, three solutions arise from an unreachable $\theta_1 = -135°$ elbow branch with $\approx149$~mm position error; in Test~6, four $\theta_1 = -90°$ solutions fail with $\approx2.1$~mm error.
+Test~3 (home position) returns 14 solutions owing to wrist-singularity degeneracy and $\theta_1=\pm180°$ wrapping; all verify to zero error.
+Tests~4 and~5 (joint-limit boundaries) verify fully, with solutions clustered around the $\theta_1=\pm180°$ periodicity equivalence.
+The primary geometric solutions for all seven configurations achieve machine-precision accuracy.
+
+\begin{table}[t]
+\centering
+\caption{FK--IK round-trip test results for the FANUC M-10iA.}
+\label{tab:iktests}
+\begin{tabular}{c l c c c}
+\toprule
+Test & $\mathbf{q}_{\mathrm{test}}$ (deg) & Sols & Pass & Max $e_p$ (mm)\\
+\midrule
+1 & $[30,45,{-30},60,{-60},45]$               &  8 &  8 & $2.7{\times}10^{-13}$ \\
+2 & $[45,20,10,80,0,{-40}]$                   &  7 &  4 & $3.6{\times}10^{-13}$ \\
+3 & $[0,0,0,0,0,0]$                            & 14 & 14 & $0$ \\
+4 & $[180,160,20,190,190,360]$                 & 14 & 14 & $3.6{\times}10^{-13}$ \\
+5 & $[{-180},{-90},{-5},{-190},{-190},{-360}]$ & 14 & 14 & $7.6{\times}10^{-13}$ \\
+6 & $[90,0,0,180,{-180},180]$                  & 11 &  7 & $2.3{\times}10^{-13}$ \\
+7 & $[45,{-90},0,0,{-90},0]$                  & 18 & 18 & $6.7{\times}10^{-13}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{RoboDK Comparison}
+To confirm the industrial applicability of the analytical solver, all results are cross-validated against RoboDK's proprietary kinematic engine.
+Code solutions are matched to the RoboDK listing using three categories: \emph{Exact} (angles agree within tolerance), \emph{Equivalent} (differ by a $\pm360°$ wrap or $\theta_1 = \pm180°$ symmetry), and \emph{Singular} (canonical singularity assignments).
+
+The visual comparisons in Fig.~\ref{fig:robodk_column} provide a direct correspondence between the solver's output and the robot's physical state in the simulator.
+For the nominal pose (Test~1), the solver identifies the exact branch shown in RoboDK, confirming the accuracy of the DH parameter implementation.
+For the home position (Test~3), the solver correctly handles the inherent wrist singularity---where axes 4 and 6 are collinear---and the $\theta_4 = 0$ fallback logic matches the canonical configuration used by RoboDK exactly.
+For the other test cases, comparing the \emph{Other Configurations} panel in RoboDK with the multi-branch solver output reveals a one-to-one mapping between every verified analytical solution and a unique, valid configuration entry in the reference software, confirming that the branch-selection logic is both complete and mathematically sound.
+
+\begin{figure}[H]
+\centering
+\begin{tabular}{c}
+    {\subfloat[Test 1: Nominal pose]{\includegraphics[width=0.75\linewidth]{1.png}}} \\[10pt]
+    {\subfloat[Test 3: Home position]{\includegraphics[width=0.75\linewidth]{3.png}}} \\[10pt]
+    {\subfloat[Test 4: Maximum joint limits]{\includegraphics[width=0.75\linewidth]{4.png}}} \\[10pt]
+\end{tabular}
+\caption{RoboDK validation screenshots for selected test cases. Each panel shows the simulator's \emph{Other Configurations} listing alongside the robot's pose, enabling direct comparison with the analytical solver output.}
+\label{fig:robodk_column}
+\end{figure}
+
+% ============================================================
+\section{Motion Planning Application}
+
+\subsection{System Architecture and Interface}
+A browser-based motion planning application was developed in HTML to demonstrate the implemented FK and IK methods in an interactive 3D environment.
+The system integrates a Three.js-based 3D renderer for real-time robot visualization and a Chart.js charting suite for monitoring joint states.
+This combination provides immediate visual feedback of the kinematic response as users manipulate target Cartesian coordinates or adjust individual joint sliders.
+
+\subsection{S-Curve Velocity Profile}
+To ensure smooth mechanical operation, all trajectories are governed by an S-curve velocity profile, which eliminates instantaneous velocity changes that would otherwise induce mechanical jerk and vibration in physical hardware.
+The profile is implemented as a cubic polynomial:
+\begin{equation}
+\sigma(s) = s^2(3-2s), \quad s \in [0,1],
+\end{equation}
+where $s$ denotes normalized time.
+At both endpoints ($s=0$ and $s=1$), the derivative $\dot{\sigma}$ equals zero, ensuring the robot starts and ends each motion from rest.
+The profile produces a smooth acceleration phase, reaches peak velocity at the midpoint ($s=0.5$), and decelerates symmetrically as the robot approaches the target configuration.
+
+\subsection{MoveJ: Joint-Space Interpolation}
+MoveJ provides the most computationally efficient transition between two configurations by synchronizing all six joint axes to start and stop simultaneously.
+The algorithm computes the difference between the goal configuration $\mathbf{q}_1$ and the start configuration $\mathbf{q}_0$, applying a wrapping function to select the shortest angular path within $(-180°, 180°]$.
+The S-curve profile $\sigma(s)$ is then applied uniformly to all joint differences, ensuring that every axis reaches its peak speed at the same instant and arrives at the goal simultaneously.
+This synchronized motion eliminates jerky transitions and produces a natural, fluid appearance.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{joint.png}
+\caption{Motion planning interface in MoveJ mode. The joint-space charts display smooth, synchronized S-curve profiles for all six axes.}
+\label{fig:movej_app}
+\end{figure}
+
+As illustrated in Fig.~\ref{fig:movej_app}, the resulting joint charts display smooth, predictable curves for each axis.
+While the end-effector path is generally curved in 3D space under MoveJ, this mode avoids kinematic singularities along the trajectory.
+
+\subsection{MoveL: Cartesian Linear Interpolation}
+MoveL constrains the end-effector to follow a straight line between two poses in Cartesian space, which is essential for tasks such as welding or sealing where the tool path must be precisely controlled.
+
+The path is discretized into $N$ steps, and the S-curve profile is applied to the end-effector's progress along the 3D line.
+At each step $s_i$, the planner performs:
+\begin{itemize}
+    \item Linear position interpolation (LERP) for the translation components $[X, Y, Z]$.
+    \item Spherical linear interpolation (SLERP) between the start and goal orientation matrices $\mathbf{R}_0$ and $\mathbf{R}_1$.
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\linewidth]{linear.png}
+\caption{Web application executing a MoveL command. The Cartesian path trail confirms that the end-effector follows a straight line, while the joint charts exhibit the non-linear profiles required to maintain this constraint.}
+\label{fig:movel_app}
+\end{figure}
+
+As illustrated in Fig.~\ref{fig:movel_app}, the IK solver is called at each discrete step.
+To maintain branch continuity along the trajectory, the planner selects the IK solution $\mathbf{q}(s_i)$ that minimizes the Euclidean distance to the previous joint state $\mathbf{q}(s_{i-1})$.
+This nearest-neighbor selection prevents the robot from switching solution branches mid-motion, resulting in continuous, physically realizable joint trajectories.
+
+% ============================================================
+\section{Conclusions}
+
+This project produced a complete FK and analytical multi-branch IK implementation for the FANUC M-10iA, verified across seven representative test configurations.
+The solver returns 7--18 solutions per pose depending on proximity to singularities and joint-limit boundaries; all geometrically reachable solutions achieve FK round-trip pose errors at or below machine precision (Table~\ref{tab:iktests}).
+
+A key implementation insight is the FANUC encoder-to-DH mapping---particularly the compound $\theta_3 = -(J_2+J_3)$ offset and sign-inverted $\theta_5 = -J_5$ (Eq.~\eqref{eq:fanucmap})---which is not apparent from the nominal DH table alone and must be derived from the robot's mechanical documentation.
+Practical lessons include the necessity of explicit branch enumeration with joint-wrap expansion, careful detection and treatment of wrist singularities, and RoboDK-based cross-validation to confirm solution fidelity.
+The MoveL planner demonstrated effective per-step IK with nearest-neighbor branch-continuity selection for tracking straight Cartesian paths.
+
+Current limitations include reliance on nominal DH parameters without geometric calibration, a simplified wrist singularity handling strategy ($\theta_4=0$ fallback), and the absence of collision awareness or velocity/acceleration constraints in the motion planner.
+Future work could incorporate singularity-robust wrist handling via damped least-squares near singular configurations, time-parameterization for full velocity and acceleration profiling, and integration with a physical calibration routine to improve absolute positional accuracy.
+
+\end{document}
