@@ -29,4 +29,5 @@ This repository contains a motion planning web app for a **Fanuc LR Mate 200iD 4
 
 ## How to run the web app (local)
 1. Use the following link to access the web app:
-   https://jessicasillus.github.io/FanucM-10iA-Kinematics/
+   [View Web App](https://jessicasillus.github.io/FanucM-10iA-Kinematics/)
+
